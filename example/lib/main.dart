@@ -14,9 +14,11 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
-  // String _platformVersion = 'Unknown';
-  // String _stringPermission = 'Unauthorized';
+  String latitude = 'No latitude';
+  String longitude = 'No longitude';
+  String status = 'No location';
   Map<dynamic, dynamic> _coordinates = {};
+  bool located = false;
 
   @override
   void initState() {
@@ -25,8 +27,6 @@ class _MyAppState extends State<MyApp> {
   }
 
   void callMethods() async {
-    // await AnotherLocationPlugin.checkPermission;
-    // await AnotherLocationPlugin.requestPermission;
     await getLastLocation();
   }
 
@@ -44,34 +44,27 @@ class _MyAppState extends State<MyApp> {
     if (!mounted) return;
   }
 
-  // Future<void> getStringPermissions() async {
-  //   String stringPermission = 'Got permission';
-  //   try {
-  //     await AnotherLocationPlugin.requestPermission;
-  //   } on PlatformException {
-  //     stringPermission = 'Failed to get string permission.';
-  //   }
-  //
-  //   if (!mounted) return;
-  //
-  //   setState(() {
-  //     _stringPermission = stringPermission;
-  //   });
-  // }
-
   Future<void> getLastLocation() async {
     Map<dynamic, dynamic> coordinates;
     try {
       coordinates = await AnotherLocationPlugin.lastCoordinates;
+      print(coordinates);
+      if (coordinates['status'] == null) {
+        located = true;
+      }
     } on PlatformException {
-      coordinates['latitude'] = 'no latitude';
-      coordinates['longitude'] = 'no longitude';
+      _coordinates['latitude'] = 'no latitude';
+      _coordinates['longitude'] = 'no longitude';
     }
 
     if (!mounted) return;
 
-    setState(() {
-      _coordinates = coordinates;
+    AnotherLocationPlugin.eventStream.listen((coordinates) {
+      setState(() {
+        _coordinates = coordinates;
+        latitude = _coordinates['latitude'].toString();
+        longitude = _coordinates['longitude'].toString();
+      });
     });
   }
 
@@ -85,8 +78,7 @@ class _MyAppState extends State<MyApp> {
         body: Column(
           children: [
             Center(
-              child: Text(
-                  '${_coordinates['latitude']}, ${_coordinates['longitude']}, ${_coordinates['status']}'),
+              child: Text(located ? '$latitude, $longitude' : status),
             ),
           ],
         ),

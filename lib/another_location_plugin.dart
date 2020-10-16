@@ -3,6 +3,11 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 
 class AnotherLocationPlugin {
+  static const EventChannel _eventChannel = const EventChannel('event_channel');
+
+  static Stream<dynamic> get eventStream =>
+      _eventChannel.receiveBroadcastStream();
+
   static const MethodChannel _channel =
       const MethodChannel('another_location_plugin');
 
