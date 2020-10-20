@@ -3,10 +3,17 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 
 class AnotherLocationPlugin {
-  static const EventChannel _eventChannel = const EventChannel('event_channel');
+  static const EventChannel _locationEventChannel =
+      const EventChannel('location_event_channel');
 
-  static Stream<dynamic> get eventStream =>
-      _eventChannel.receiveBroadcastStream();
+  static const EventChannel _activityEventChannel =
+      const EventChannel('activity_event_channel');
+
+  static Stream<dynamic> get locationEventStream =>
+      _locationEventChannel.receiveBroadcastStream();
+
+  static Stream<dynamic> get activityResultEventStream =>
+      _activityEventChannel.receiveBroadcastStream();
 
   static const MethodChannel _channel =
       const MethodChannel('another_location_plugin');
@@ -24,6 +31,11 @@ class AnotherLocationPlugin {
   static Future<void> get requestPermission async {
     await _channel.invokeMethod('requestPermission');
     return;
+  }
+
+  static Future<bool> get resultFromActivity async {
+    final bool result = await _channel.invokeMethod('requestActivityForResult');
+    return result;
   }
 
   static Future<Map<dynamic, dynamic>> get lastCoordinates async {
