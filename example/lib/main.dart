@@ -1,121 +1,57 @@
 import 'dart:async';
 
-import 'package:another_location_plugin/another_location_plugin.dart';
+import 'package:another_location_plugin_example/plugin_brain.dart';
+import 'package:another_location_plugin_example/plugin_button.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 void main() {
   runApp(MyApp());
 }
 
-class MyApp extends StatefulWidget with WidgetsBindingObserver {
+class MyApp extends StatefulWidget {
   @override
   _MyAppState createState() => _MyAppState();
 }
 
-class _MyAppState extends State<MyApp> {
+PluginBrain pluginBrain = new PluginBrain();
+
+class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   var _initialized = false;
+  var _permissionGranted = false;
   var _latitude = 'No latitude';
   var _longitude = 'No longitude';
-  var _permissionGranted = false;
   var _messageFromActivity = 'No message for now';
-  String status = 'No located';
   Map<dynamic, dynamic> _coordinates = {};
-  bool located = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
   }
 
-  Future<void> initializePlugin() async {
-    bool initialize;
-    try {
-      initialize = await AnotherLocationPlugin.initializePlugin;
-    } on PlatformException {
-      print("No initialization");
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    switch (state) {
+      case AppLifecycleState.detached:
+        print("detached");
+        break;
+      case AppLifecycleState.inactive:
+        print("inactive");
+        break;
+      case AppLifecycleState.paused:
+        print("paused");
+        break;
+      case AppLifecycleState.resumed:
+        print("resumed");
+        break;
     }
-
-    if (!mounted) return;
-
-    if (initialize) {
-      setState(() {
-        _initialized = true;
-      });
-    }
+    setState(() {});
   }
 
-  Future<void> getLastLocation() async {
-    Map<dynamic, dynamic> coordinates;
-    try {
-      coordinates = await AnotherLocationPlugin.lastCoordinates;
-      print(coordinates);
-      if (coordinates['status'] == null) {
-        located = true;
-      }
-    } on PlatformException {
-      _coordinates['latitude'] = 'no latitude';
-      _coordinates['longitude'] = 'no longitude';
-    }
+  Future<void> initializePlugin() async => _initialized = await pluginBrain.initializePlugin();
 
-    if (!mounted) return;
-
-    AnotherLocationPlugin.locationEventStream.listen((coordinates) {
-      setState(() {
-        _coordinates = coordinates;
-        _latitude = _coordinates['latitude'].toStringAsFixed(2);
-        _longitude = _coordinates['longitude'].toStringAsFixed(2);
-      });
-    });
-  }
-
-  Future<void> getResultFromActivity() async {
-    bool result;
-    try {
-      result = await AnotherLocationPlugin.resultFromActivity;
-    } on PlatformException {
-      print("No result");
-    }
-
-    if (!mounted) return;
-
-    AnotherLocationPlugin.activityResultEventStream.listen((result) {
-      setState(() {
-        if (result != null) {
-          _messageFromActivity = result;
-        } else {
-          _messageFromActivity = "nothing came back";
-        }
-        print(result);
-      });
-    });
-  }
-
-  Future<void> checkPermission() async {
-    bool result;
-    try {
-      result = await AnotherLocationPlugin.checkPermission;
-    } on PlatformException {
-      print("No result");
-    }
-
-    if (!mounted) return;
-
-    if (!result) {
-      setState(() {
-        _permissionGranted = true;
-      });
-    }
-  }
-
-  Future<void> requestPermission() async {
-    try {
-      await AnotherLocationPlugin.requestPermission;
-    } on PlatformException {
-      print("No permission requested");
-    }
-    if (!mounted) return;
-  }
+  Future<void> checkPermission() async => _permissionGranted = await pluginBrain.checkPermission();
 
   @override
   Widget build(BuildContext context) {
@@ -130,63 +66,86 @@ class _MyAppState extends State<MyApp> {
             children: [
               Column(
                 children: [
-                  FlatButton(
-                    child: Text('Initialize Plugin'),
-                    color: Colors.red,
-                    onPressed: () {
-                      initializePlugin();
-                    },
-                  ),
-                  Text(_initialized
-                      ? 'THE PLUGIN IS UP AND RUNNING'
-                      : 'THE PLUGIN IS SLEEPING'),
+                  PluginButton(
+                      text: 'Initialize Plugin',
+                      color: Colors.red,
+                      onPressed: () {
+                        setState(() {
+                          initializePlugin();
+                        });
+                      }),
+                  Text(_initialized ? 'THE PLUGIN IS UP AND RUNNING' : 'THE PLUGIN IS SLEEPING'),
                 ],
               ),
               Column(
                 children: [
-                  FlatButton(
-                    child: Text('Check if Permissions are granted'),
-                    color: Colors.amber,
-                    onPressed: () {
-                      checkPermission();
-                    },
-                  ),
+                  PluginButton(
+                      text: 'Check if Permissions are granted',
+                      color: Colors.amber,
+                      onPressed: () {
+                        setState(() {
+                          checkPermission();
+                        });
+                      }),
                   Text(_permissionGranted ? 'Go ahead' : 'No permission'),
                 ],
               ),
               Column(
                 children: [
-                  FlatButton(
-                    child: Text('Request for Permissions of location'),
-                    color: Colors.pinkAccent,
-                    onPressed: () {
-                      requestPermission();
-                    },
-                  ),
+                  PluginButton(
+                      text: 'Request for Permissions of location',
+                      color: Colors.pinkAccent,
+                      onPressed: () {
+                        pluginBrain.requestPermission();
+                      }),
                 ],
               ),
               Column(
                 children: [
-                  FlatButton(
-                    child: Text('Start listening Location'),
-                    color: Colors.blue,
-                    onPressed: () {
-                      getLastLocation();
-                    },
-                  ),
-                  Text('Latitude: $_latitude \nLongitude: $_longitude'),
+                  PluginButton(
+                      text: 'Start listening Location',
+                      color: Colors.blue,
+                      onPressed: () {
+                        pluginBrain.getLastLocation();
+                      }),
+                  StreamBuilder<dynamic>(
+                      stream: pluginBrain.locationStream,
+                      builder: (context, snapshot) {
+                        if (snapshot.data != null) {
+                          _coordinates = snapshot.data;
+                          _latitude = _coordinates['latitude'].toStringAsFixed(2);
+                          _longitude = _coordinates['longitude'].toStringAsFixed(2);
+                        }
+                        return Text('Latitude: $_latitude \nLongitude: $_longitude');
+                      }),
                 ],
               ),
               Column(
                 children: [
-                  FlatButton(
-                    child: Text('Go to new Activity'),
-                    color: Colors.lightGreenAccent,
-                    onPressed: () {
-                      getResultFromActivity();
-                    },
-                  ),
-                  Text("Message: $_messageFromActivity"),
+                  PluginButton(
+                      text: 'Stop listening Location',
+                      color: Colors.purple,
+                      onPressed: () {
+                        pluginBrain.stopLocationUpdates();
+                      }),
+                ],
+              ),
+              Column(
+                children: [
+                  PluginButton(
+                      text: 'Go to new Activity',
+                      color: Colors.lightGreenAccent,
+                      onPressed: () {
+                        pluginBrain.getResultFromActivity();
+                      }),
+                  StreamBuilder<dynamic>(
+                      stream: pluginBrain.activityResultStream,
+                      builder: (context, snapshot) {
+                        if (snapshot.data != null) {
+                          _messageFromActivity = snapshot.data;
+                        }
+                        return Text("Message: $_messageFromActivity");
+                      }),
                 ],
               ),
               // Center(

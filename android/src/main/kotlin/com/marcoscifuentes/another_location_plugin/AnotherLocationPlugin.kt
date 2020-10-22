@@ -24,7 +24,7 @@ import io.flutter.plugin.common.PluginRegistry
 
 
 /** AnotherLocationPlugin */
-class AnotherLocationPlugin : FlutterPlugin, MethodCallHandler, ActivityAware, EventChannel.StreamHandler, PluginRegistry.ActivityResultListener {
+class AnotherLocationPlugin : FlutterPlugin, MethodCallHandler, ActivityAware, PluginRegistry.ActivityResultListener {
     private lateinit var channel: MethodChannel
 
     private val mapper = LocationMapper()
@@ -34,18 +34,39 @@ class AnotherLocationPlugin : FlutterPlugin, MethodCallHandler, ActivityAware, E
     private var locationRequest: LocationRequest? = null
     private var locationCallback: LocationCallback? = null
 
-    private var eventSource: EventChannel.EventSink? = null
+    private var locationEventSource: EventChannel.EventSink? = null
+    private var activityEventSource: EventChannel.EventSink? = null
     private var locationEventChannel: EventChannel? = null
     private var activityEventChannel: EventChannel? = null
+
+    private var locationListener: EventChannel.StreamHandler = object : EventChannel.StreamHandler {
+        override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+            locationEventSource = events
+        }
+
+        override fun onCancel(arguments: Any?) {
+            locationEventSource = null
+        }
+    }
+
+    private var activityListener: EventChannel.StreamHandler = object : EventChannel.StreamHandler {
+        override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+            activityEventSource = events
+        }
+
+        override fun onCancel(arguments: Any?) {
+            activityEventSource = null
+        }
+    }
 
     override fun onAttachedToEngine(@NonNull flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
         context = flutterPluginBinding.applicationContext
         channel = MethodChannel(flutterPluginBinding.binaryMessenger, "another_location_plugin")
         channel.setMethodCallHandler(this)
         locationEventChannel = EventChannel(flutterPluginBinding.binaryMessenger, "location_event_channel")
-        locationEventChannel?.setStreamHandler(this)
+        locationEventChannel?.setStreamHandler(locationListener)
         activityEventChannel = EventChannel(flutterPluginBinding.binaryMessenger, "activity_event_channel")
-        activityEventChannel?.setStreamHandler(this)
+        activityEventChannel?.setStreamHandler(activityListener)
 
     }
 
@@ -58,14 +79,9 @@ class AnotherLocationPlugin : FlutterPlugin, MethodCallHandler, ActivityAware, E
             "requestActivityForResult" -> onRequestActivityForResult(result)
             "requestPermission" -> onRequestPermission()
             "checkPermission" -> onCheckPermissions(result)
+            "stopLocationUpdates" -> onStopLocationUpdates(result)
             else -> result.notImplemented()
         }
-    }
-
-    private fun onRequestActivityForResult(result: Result) {
-        val launchSecondActivity = 639
-        result.success(true)
-        startActivityForResult(activity!!, context?.let { ForOrderActivity.getIntent(it) }!!, launchSecondActivity, null)
     }
 
     private fun initializePlugin(result: Result) {
@@ -81,35 +97,12 @@ class AnotherLocationPlugin : FlutterPlugin, MethodCallHandler, ActivityAware, E
                 locationCallback = object : LocationCallback() {
                     override fun onLocationResult(locationResult: LocationResult) {
                         Log.d("HARRYLOG", "${locationResult.lastLocation.latitude},${locationResult.lastLocation.longitude}")
-                        eventSource?.success(mapper.toHashMap(locationResult.lastLocation))
+                        locationEventSource?.success(mapper.toHashMap(locationResult.lastLocation))
                     }
                 }
-                fusedLocationClient?.requestLocationUpdates(locationRequest, locationCallback, null)
                 result.success(true)
             }
         }
-    }
-
-    private fun onGetLastKnownPosition(result: Result) {
-        activity?.let {
-            fusedLocationClient?.lastLocation?.addOnSuccessListener(it) { location: Location? ->
-                result.success(mapper.toHashMap(location))
-            }
-            fusedLocationClient?.lastLocation?.addOnFailureListener {
-                result.success(mapper.toHashMap(null))
-            }
-        }
-    }
-
-    private fun onRequestPermission() {
-        context?.run {
-            ActivityCompat.requestPermissions(activity!!, arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION),
-                    500)
-        }
-    }
-
-    private fun onIsLocationServiceEnabled(result: Any) {
-
     }
 
     private fun checkPermissionIsDenied(): Boolean {
@@ -123,6 +116,42 @@ class AnotherLocationPlugin : FlutterPlugin, MethodCallHandler, ActivityAware, E
 
     private fun onCheckPermissions(result: Result) {
         result.success(checkPermissionIsDenied())
+    }
+
+    private fun onRequestPermission() {
+        context?.run {
+            ActivityCompat.requestPermissions(activity!!, arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION),
+                    500)
+        }
+    }
+
+    private fun onGetLastKnownPosition(result: Result) {
+        activity?.let {
+            fusedLocationClient?.requestLocationUpdates(locationRequest, locationCallback, null)
+            fusedLocationClient?.lastLocation?.addOnSuccessListener(it) { location: Location? ->
+                result.success(mapper.toHashMap(location))
+            }
+            fusedLocationClient?.lastLocation?.addOnFailureListener {
+                result.success(mapper.toHashMap(null))
+            }
+        }
+    }
+
+    private fun onIsLocationServiceEnabled(result: Any) {
+
+    }
+
+    private fun onRequestActivityForResult(result: Result) {
+        val launchSecondActivity = 639
+        result.success(true)
+        startActivityForResult(activity!!, context?.let { ForOrderActivity.getIntent(it) }!!, launchSecondActivity, null)
+    }
+
+    private fun onStopLocationUpdates(result: Result) {
+        context?.run {
+            fusedLocationClient?.removeLocationUpdates(locationCallback)
+        }
+        result.success(true)
     }
 
     override fun onDetachedFromEngine(@NonNull binding: FlutterPlugin.FlutterPluginBinding) {
@@ -146,18 +175,11 @@ class AnotherLocationPlugin : FlutterPlugin, MethodCallHandler, ActivityAware, E
         activity = null
     }
 
-    override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
-        eventSource = events
-    }
-
-    override fun onCancel(arguments: Any?) {
-        eventSource = null
-    }
-
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?): Boolean {
         if (requestCode == 639) {
             if (resultCode == Activity.RESULT_OK) {
-                eventSource?.success(data?.getStringExtra(ORDER))
+                Log.d("ACTIVITYHARRYLOG", "${data?.getStringExtra(ORDER)}")
+                activityEventSource?.success(data?.getStringExtra(ORDER))
                 return true
             }
         }
